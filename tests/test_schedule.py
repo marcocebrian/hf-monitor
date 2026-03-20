@@ -25,6 +25,12 @@ def test_normalizar_dias_eibi_list():
     assert normalizar_dias('Sa')     == '6'
     assert normalizar_dias('Su')     == '7'
 
+def test_temporada_actual_returns_valid():
+    from api.schedule import temporada_actual
+    letra, sufijo = temporada_actual()
+    assert letra in ('A', 'B')
+    assert len(sufijo) == 2 and sufijo.isdigit()
+
 def test_solar_fallback():
     """When NOAA is unreachable, should return default f107=120."""
     from unittest.mock import patch

@@ -49,3 +49,77 @@ def normalizar_dias(dias_str):
     if dias_set:
         return ''.join(str(x) for x in sorted(set(dias_set)))
     return '1234567'
+
+
+# ── Season detection + download utilities ─────────────────────────────────────
+
+import calendar as _cal
+
+SSL_CTX = ssl.create_default_context()
+SSL_CTX.check_hostname = False
+SSL_CTX.verify_mode = ssl.CERT_NONE
+
+HEADERS = {'User-Agent': 'HFMonitor/1.0 (shortwave.app)'}
+TIMEOUT = 5
+
+
+def temporada_actual():
+    """Return (letra, sufijo_2dig) e.g. ('B', '25') or ('A', '26')."""
+    ahora = datetime.now(timezone.utc)
+    año = ahora.year
+
+    def ultimo_domingo(y, m):
+        ultimo_dia = _cal.monthrange(y, m)[1]
+        d = datetime(y, m, ultimo_dia, tzinfo=timezone.utc)
+        d = d.replace(day=d.day - (d.weekday() + 1) % 7)
+        return d
+
+    cambio_a = ultimo_domingo(año, 3)
+    cambio_b = ultimo_domingo(año, 10)
+
+    if ahora < cambio_a:
+        return 'B', str(año - 1)[-2:]
+    elif ahora < cambio_b:
+        return 'A', str(año)[-2:]
+    else:
+        return 'B', str(año)[-2:]
+
+
+def _decode(raw):
+    for enc in ('utf-8', 'iso-8859-1', 'latin-1'):
+        try:
+            return raw.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return raw.decode('utf-8', errors='replace')
+
+
+def descargar_texto(url):
+    req = urllib.request.Request(url, headers=HEADERS)
+    with urllib.request.urlopen(req, timeout=TIMEOUT, context=SSL_CTX) as r:
+        return _decode(r.read())
+
+
+def descargar_zip_memoria(url):
+    req = urllib.request.Request(url, headers=HEADERS)
+    with urllib.request.urlopen(req, timeout=TIMEOUT, context=SSL_CTX) as r:
+        zip_data = io.BytesIO(r.read())
+    with zipfile.ZipFile(zip_data) as z:
+        for nombre in z.namelist():
+            if nombre.lower().endswith(('.txt', '.csv')):
+                return _decode(z.read(nombre))
+        return _decode(z.read(z.namelist()[0]))
+
+
+def intentar_urls(lista_urls, modo='texto'):
+    """Try each URL in order; return (text, url_used) or raise."""
+    errores = []
+    for url in lista_urls:
+        try:
+            if modo == 'zip':
+                return descargar_zip_memoria(url), url
+            else:
+                return descargar_texto(url), url
+        except Exception as e:
+            errores.append(f'{url} → {e}')
+    raise ConnectionError('All URLs failed:\n' + '\n'.join(errores))
