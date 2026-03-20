@@ -1,7 +1,544 @@
 <!DOCTYPE html>
 <html lang="es">
-<head><meta charset="UTF-8"><title>HF Monitor — Engine Test</title></head>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HF Monitor · Español</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <!-- Timezone lookup: lat/lon → IANA string, ~30KB, no API key -->
+  <script src="https://cdn.jsdelivr.net/npm/tz-lookup@6.1.25/tz.js"></script>
+  <style>
+    :root {
+      --bg:       #0a0e14;
+      --surface:  #111720;
+      --border:   #1e2d3d;
+      --accent:   #00e5a0;
+      --accent2:  #0099ff;
+      --live:     #ff4757;
+      --text:     #cdd9e5;
+      --muted:    #4a5568;
+      --freq:     #00e5a0;
+      --mono:     'Space Mono', monospace;
+      --sans:     'DM Sans', sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 32px 24px 60px;
+    }
+
+    /* ── Scanline overlay ── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,0.07) 2px,
+        rgba(0,0,0,0.07) 4px
+      );
+      pointer-events: none;
+      z-index: 999;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-bottom: 36px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .header-left h1 {
+      font-family: var(--mono);
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .header-left h1 span {
+      color: var(--muted);
+    }
+
+    .meta {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-top: 6px;
+      font-family: var(--mono);
+      letter-spacing: 0.04em;
+    }
+
+    .header-right {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 4px;
+    }
+
+    .clock {
+      font-family: var(--mono);
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 0.1em;
+    }
+
+    .clock-label {
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      color: var(--muted);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    /* ── Toolbar ── */
+    .toolbar {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .search-wrap {
+      position: relative;
+      flex: 1;
+      min-width: 200px;
+      max-width: 340px;
+    }
+
+    .search-wrap svg {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted);
+      width: 15px; height: 15px;
+    }
+
+    .toolbar input[type=text] {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 9px 12px 9px 36px;
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .toolbar input[type=text]:focus {
+      border-color: var(--accent);
+    }
+
+    .toolbar input[type=text]::placeholder {
+      color: var(--muted);
+    }
+
+    .toggle-live {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 9px 14px;
+      cursor: pointer;
+      user-select: none;
+      font-size: 0.8rem;
+      color: var(--muted);
+      transition: border-color 0.2s, color 0.2s;
+      white-space: nowrap;
+    }
+
+    .toggle-live input { display: none; }
+
+    .toggle-live.active {
+      border-color: var(--live);
+      color: var(--live);
+    }
+
+    .pulse-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--live);
+      flex-shrink: 0;
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: 0.4; transform: scale(0.7); }
+    }
+
+    .count-pill {
+      margin-left: auto;
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+    }
+
+    /* ── Table ── */
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 680px;
+    }
+
+    thead tr {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+
+    th {
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding: 12px 16px;
+      text-align: left;
+      white-space: nowrap;
+      font-weight: 400;
+    }
+
+    tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background 0.15s;
+    }
+
+    tbody tr:last-child { border-bottom: none; }
+
+    tbody tr:hover td { background: rgba(255,255,255,0.025); }
+
+    td {
+      padding: 13px 16px;
+      font-size: 0.855rem;
+      vertical-align: middle;
+    }
+
+    /* Live row */
+    tbody tr.activa {
+      background: rgba(255, 71, 87, 0.04);
+    }
+    tbody tr.activa td:first-child {
+      border-left: 2px solid var(--live);
+      padding-left: 14px;
+    }
+
+    /* Frequency cell */
+    .freq {
+      font-family: var(--mono);
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--freq);
+      letter-spacing: 0.03em;
+    }
+
+    .freq-unit {
+      font-size: 0.6rem;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      margin-left: 2px;
+      vertical-align: middle;
+    }
+
+    /* Station name */
+    .station-name {
+      font-weight: 500;
+      color: #e2e8f0;
+      font-size: 0.875rem;
+    }
+
+    /* Live badge — animated dot only, no ugly button */
+    .live-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--live);
+      white-space: nowrap;
+    }
+
+    .live-indicator .dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--live);
+      animation: pulse 1.4s ease-in-out infinite;
+      flex-shrink: 0;
+    }
+
+    /* UTC / IST times */
+    .time-val {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--text);
+      letter-spacing: 0.04em;
+    }
+
+    .time-ist {
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      color: #7a8fa6;
+    }
+
+    /* Days */
+    .days {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: var(--muted);
+      letter-spacing: 0.06em;
+    }
+
+    /* Source tags */
+    .src-tag {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 0.6rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      padding: 2px 6px;
+      border-radius: 3px;
+      margin-right: 4px;
+      text-transform: uppercase;
+    }
+
+    .src-eibi {
+      background: rgba(255, 200, 60, 0.1);
+      color: #f0b429;
+      border: 1px solid rgba(255, 200, 60, 0.25);
+    }
+
+    .src-hfcc {
+      background: rgba(0, 153, 255, 0.1);
+      color: var(--accent2);
+      border: 1px solid rgba(0, 153, 255, 0.25);
+    }
+
+    /* ── Propagation signal bars ── */
+    .prop-bar { display: inline-flex; align-items: center; gap: 7px; }
+    .prop-segments { display: flex; gap: 2px; align-items: flex-end; }
+    .seg { width: 4px; border-radius: 1px; }
+    .seg-1 { height: 5px; }
+    .seg-2 { height: 8px; }
+    .seg-3 { height: 11px; }
+    .seg-4 { height: 14px; }
+    .prop-alta     .seg { background: #00e5a0; opacity: 1; }
+    .prop-media    .seg { background: #f0b429; }
+    .prop-media    .seg-4 { opacity: 0.2; }
+    .prop-media    .seg-3 { opacity: 1; }
+    .prop-media    .seg-2 { opacity: 1; }
+    .prop-media    .seg-1 { opacity: 1; }
+    .prop-baja     .seg { background: #718096; }
+    .prop-baja     .seg-4 { opacity: 0.15; }
+    .prop-baja     .seg-3 { opacity: 0.15; }
+    .prop-baja     .seg-2 { opacity: 1; }
+    .prop-baja     .seg-1 { opacity: 1; }
+    .prop-improbable .seg { background: #2d3748; opacity: 0.4; }
+    .prop-label { font-family: var(--mono); font-size: 0.58rem; letter-spacing: 0.08em; text-transform: uppercase; }
+    .prop-alta     .prop-label { color: #00e5a0; }
+    .prop-media    .prop-label { color: #f0b429; }
+    .prop-baja     .prop-label { color: #4a5568; }
+    .prop-improbable .prop-label { color: #2d3748; }
+
+    /* Profile selector tabs */
+    .profile-tabs { display: flex; gap: 4px; }
+    .ptab {
+      font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.06em;
+      padding: 7px 14px; border-radius: 6px; border: 1px solid var(--border);
+      background: transparent; color: var(--muted); cursor: pointer; transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .ptab:hover { border-color: var(--accent); color: var(--text); }
+    .ptab.active { background: rgba(0,229,160,0.1); border-color: var(--accent); color: var(--accent); }
+
+    /* ── Sortable column headers ── */
+    th.sortable { cursor: pointer; user-select: none; transition: color 0.15s; }
+    th.sortable:hover { color: #7ee8c8; }
+    th.sort-asc, th.sort-desc { color: var(--accent); }
+    .sort-icon { opacity: 0.3; font-size: 0.65em; margin-left: 4px; transition: opacity 0.15s; }
+    th.sort-asc  .sort-icon { opacity: 1; }
+    th.sort-desc .sort-icon { opacity: 1; }
+
+    tbody tr.prop-highlight td { background: rgba(0,229,160,0.05); }
+    tbody tr.prop-highlight td:first-child { border-left: 2px solid #00e5a0; padding-left: 14px; }
+    tbody tr.activa.prop-highlight td:first-child { border-left: 2px solid #00e5a0; }
+
+    /* Empty state */
+    .empty {
+      text-align: center;
+      padding: 60px 20px;
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--muted);
+      letter-spacing: 0.06em;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+    /* ── City search ── */
+    .city-wrap { position: relative; min-width: 220px; }
+    .city-suggestions {
+      position: absolute; top: 100%; left: 0; right: 0; z-index: 50;
+      background: var(--surface); border: 1px solid var(--border);
+      border-top: none; border-radius: 0 0 6px 6px;
+      max-height: 200px; overflow-y: auto;
+    }
+    .city-suggestions li {
+      padding: 8px 12px; cursor: pointer; font-size: 0.78rem;
+      color: var(--text); list-style: none;
+      transition: background 0.15s;
+    }
+    .city-suggestions li:hover { background: var(--border); }
+    .city-pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: var(--surface); border: 1px solid var(--accent);
+      border-radius: 20px; padding: 4px 10px;
+      font-size: 0.75rem; font-family: var(--mono); color: var(--accent);
+    }
+    .city-pill .clear-city { cursor: pointer; color: var(--muted); margin-left: 4px; }
+    .city-pill .clear-city:hover { color: var(--live); }
+
+    /* ── Loading overlay ── */
+    #loading-overlay {
+      position: fixed; inset: 0; z-index: 1000;
+      background: var(--bg);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 24px;
+    }
+    .radar-ring {
+      width: 80px; height: 80px; border-radius: 50%;
+      border: 2px solid var(--border);
+      position: relative;
+    }
+    .radar-ring::after {
+      content: '';
+      position: absolute; inset: 0; border-radius: 50%;
+      border: 2px solid transparent;
+      border-top-color: var(--accent);
+      animation: radar-spin 1.2s linear infinite;
+    }
+    @keyframes radar-spin { to { transform: rotate(360deg); } }
+    .loading-text {
+      font-family: var(--mono); font-size: 0.85rem;
+      color: var(--accent); letter-spacing: 0.2em;
+      animation: blink 1.4s ease-in-out infinite;
+    }
+    @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+    /* ── Solar badge ── */
+    .solar-badge {
+      font-family: var(--mono); font-size: 0.7rem;
+      color: var(--muted); letter-spacing: 0.06em;
+      margin-top: 4px;
+    }
+
+    /* ── No-data prop cell ── */
+    .prop-dash { color: var(--muted); font-family: var(--mono); font-size: 0.8rem; }
+  </style>
+</head>
 <body>
+
+<!-- Loading overlay -->
+<div id="loading-overlay">
+  <div class="radar-ring"></div>
+  <div class="loading-text">SCANNING...</div>
+</div>
+
+<header>
+  <div class="header-left">
+    <h1>HF Monitor <span>· Español</span></h1>
+    <div class="meta" id="meta-season">Cargando temporada…</div>
+  </div>
+  <div class="header-right">
+    <div class="clock" id="utc-clock">00:00:00</div>
+    <div class="clock-label">UTC</div>
+    <div class="solar-badge" id="solar-badge">☀ SFI — · —</div>
+  </div>
+</header>
+
+<div class="toolbar">
+  <!-- Text search (unchanged from original) -->
+  <div class="search-wrap">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+    </svg>
+    <input type="text" id="filtro" placeholder="Buscar emisora, frecuencia…"
+           oninput="filtrar()">
+  </div>
+
+  <!-- Live toggle (unchanged) -->
+  <label class="toggle-live" id="toggle-label">
+    <input type="checkbox" id="soloVivo"
+           onchange="filtrar(); this.closest('label').classList.toggle('active', this.checked)">
+    <span class="pulse-dot"></span>
+    Solo en el aire
+  </label>
+
+  <!-- City search (replaces profile tabs) -->
+  <div class="city-wrap">
+    <div id="city-pill-wrap"></div>
+    <div class="search-wrap" id="city-search-wrap" style="display:none">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <input type="text" id="city-input" placeholder="Tu ciudad…"
+             oninput="onCityInput(this.value)" autocomplete="off">
+      <ul class="city-suggestions" id="city-suggestions" style="display:none"></ul>
+    </div>
+  </div>
+
+  <span class="count-pill" id="count"></span>
+</div>
+
+<div class="table-wrap">
+  <table id="tabla">
+    <thead>
+      <tr>
+        <th data-col="freq"    class="sortable">Frecuencia <span class="sort-icon">↕</span></th>
+        <th data-col="emisora" class="sortable">Emisora <span class="sort-icon">↕</span></th>
+        <th data-col="en_vivo" class="sortable">Estado <span class="sort-icon">↕</span></th>
+        <th data-col="utc"     class="sortable">UTC <span class="sort-icon">↕</span></th>
+        <th>Local</th>
+        <th data-col="dias"    class="sortable">Días <span class="sort-icon">↕</span></th>
+        <th data-col="prop"    class="sortable" id="prop-header">Propagación <span class="sort-icon">↕</span></th>
+        <th>Fuentes</th>
+      </tr>
+    </thead>
+    <tbody id="cuerpo"></tbody>
+  </table>
+</div>
+
 <script>
 // ── HF Propagation Engine (ported from lista_emisoras_avanzado.py) ──────────
 
@@ -142,18 +679,269 @@ function esta_en_aire_ahora(utc_start, utc_end, dias_str) {
   return hora_actual >= inicio || hora_actual < fin; // crosses midnight
 }
 
-// ── Self-test ────────────────────────────────────────────────────────────────
-console.assert(Math.abs(haversine_km(39.47, -0.38, 19.07, 72.88) - 7218) < 100,
-  'haversine Valencia→Mumbai should be ~7218 km');
+// ── App State ────────────────────────────────────────────────────────────────
+let SCHEDULE  = [];
+let SOLAR_FLUX = 120;
+// CITY: { name, lat, lon } or null
+// Stored as a single JSON object under 'hfm_city'.
+let CITY = JSON.parse(localStorage.getItem('hfm_city') || 'null');
 
-const s = calcular_score_propagacion(15110, 39.88, -3.44, 500, 19.07, 72.88, 270, 120);
-console.assert(s.label !== 'sin datos', 'NOB→Mumbai should have a label');
-console.assert(s.score >= 0 && s.score <= 100, 'score out of range');
+// ── UTC clock ────────────────────────────────────────────────────────────────
+function updateClock() {
+  const n = new Date();
+  document.getElementById('utc-clock').textContent =
+    String(n.getUTCHours()).padStart(2,'0') + ':' +
+    String(n.getUTCMinutes()).padStart(2,'0') + ':' +
+    String(n.getUTCSeconds()).padStart(2,'0');
+}
+updateClock(); setInterval(updateClock, 1000);
 
-const s2 = calcular_score_propagacion(15110, null, null, 500, 19.07, 72.88, null, 120);
-console.assert(s2.label === 'sin datos', 'null tx should return sin datos');
+// ── Solar flux badge ─────────────────────────────────────────────────────────
+function updateSolarBadge(f107) {
+  const label = f107 < 100 ? 'Bajo' : f107 <= 150 ? 'Normal' : 'Alto';
+  document.getElementById('solar-badge').textContent =
+    `☀ SFI ${Math.round(f107)} · ${label}`;
+}
 
-console.log('✅ Engine self-test passed');
+// ── City search ───────────────────────────────────────────────────────────────
+let _cityTimer = null;
+function onCityInput(val) {
+  clearTimeout(_cityTimer);
+  const sug = document.getElementById('city-suggestions');
+  if (val.length < 2) { sug.style.display = 'none'; return; }
+  _cityTimer = setTimeout(() => searchCity(val), 500);
+}
+
+async function searchCity(q) {
+  const sug = document.getElementById('city-suggestions');
+  try {
+    const resp = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5`,
+      { headers: { 'User-Agent': 'HFMonitor/1.0 (shortwave.app)' } }
+    );
+    const hits = await resp.json();
+    if (!hits.length) { sug.style.display = 'none'; return; }
+    sug.innerHTML = hits.map(h =>
+      `<li onclick="selectCity(${h.lat},${h.lon},'${h.display_name.replace(/'/g,"\\'")}')">
+        ${h.display_name}
+      </li>`
+    ).join('');
+    sug.style.display = 'block';
+  } catch { sug.style.display = 'none'; }
+}
+
+function selectCity(lat, lon, name) {
+  CITY = { lat: parseFloat(lat), lon: parseFloat(lon), name };
+  localStorage.setItem('hfm_city', JSON.stringify(CITY));
+  document.getElementById('city-suggestions').style.display = 'none';
+  document.getElementById('city-input').value = '';
+  document.getElementById('city-search-wrap').style.display = 'none';
+  renderCityPill();
+  updatePropHeader();
+  renderTable();
+}
+
+function renderCityPill() {
+  const wrap = document.getElementById('city-pill-wrap');
+  if (CITY) {
+    const short = CITY.name.split(',')[0];
+    wrap.innerHTML = `<span class="city-pill">📍 ${short}
+      <span class="clear-city" onclick="clearCity()">✕</span>
+    </span>`;
+  } else {
+    wrap.innerHTML = `<button class="toggle-live" onclick="showCitySearch()">📍 Tu ciudad</button>`;
+  }
+}
+
+function showCitySearch() {
+  document.getElementById('city-search-wrap').style.display = 'block';
+  document.getElementById('city-input').focus();
+}
+
+function clearCity() {
+  CITY = null;
+  localStorage.removeItem('hfm_city');
+  renderCityPill();
+  updatePropHeader();
+  renderTable();
+}
+
+function updatePropHeader() {
+  const th = document.getElementById('prop-header');
+  const city = CITY ? CITY.name.split(',')[0] : 'Propagación';
+  th.innerHTML = `${city} <span class="sort-icon">↕</span>`;
+}
+
+// ── Local time for selected city ──────────────────────────────────────────────
+function formatLocal(utc_start, city) {
+  // No city selected → show UTC time (spec requirement)
+  if (!city) {
+    return utc_start.slice(0,2) + ':' + utc_start.slice(2,4) + ' UTC';
+  }
+  const tz = typeof tzlookup === 'function' ? tzlookup(city.lat, city.lon) : null;
+  if (!tz) return utc_start.slice(0,2) + ':' + utc_start.slice(2,4) + ' UTC';
+  const h = parseInt(utc_start.slice(0,2), 10);
+  const m = parseInt(utc_start.slice(2,4), 10);
+  const now = new Date();
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), h, m));
+  return new Intl.DateTimeFormat('es', {
+    hour: '2-digit', minute: '2-digit', timeZone: tz, hour12: false
+  }).format(d);
+}
+
+// ── Propagation bar ───────────────────────────────────────────────────────────
+function propBar(score, label) {
+  return `<div class="prop-bar prop-${label}" title="Score: ${score}/100">
+    <div class="prop-segments">
+      <div class="seg seg-1"></div><div class="seg seg-2"></div>
+      <div class="seg seg-3"></div><div class="seg seg-4"></div>
+    </div>
+    <span class="prop-label">${label}</span>
+  </div>`;
+}
+
+// ── Table rendering ───────────────────────────────────────────────────────────
+let sortCol = null, sortDir = 1;
+
+function renderTable() {
+  const tbody = document.getElementById('cuerpo');
+  tbody.innerHTML = '';
+
+  const rows = SCHEDULE.map(em => {
+    const en_vivo = esta_en_aire_ahora(em.utc_start, em.utc_end, em.dias);
+    let prop = { score: 0, label: '—' };
+    if (CITY) {
+      prop = calcular_score_propagacion(
+        parseFloat(em.freq), em.lat_tx, em.lon_tx,
+        em.powr_kw, CITY.lat, CITY.lon, em.azimuth, SOLAR_FLUX
+      );
+    }
+    const fuentes = em.fuentes.map(f =>
+      `<span class="src-tag src-${f.toLowerCase()}">${f}</span>`
+    ).join('');
+    const badge = en_vivo
+      ? `<span class='live-indicator'><span class='dot'></span>En el aire</span>` : '';
+    const propCell = CITY
+      ? propBar(prop.score, prop.label)
+      : `<span class="prop-dash">—</span>`;
+    const local = formatLocal(em.utc_start, CITY);
+
+    return {
+      em, en_vivo, prop,
+      html: `<tr class="${en_vivo ? 'activa' : ''}"
+               data-freq="${em.freq}"
+               data-emisora="${em.emisora.toLowerCase()}"
+               data-en-vivo="${en_vivo ? '1' : '0'}"
+               data-utc="${em.utc_start}"
+               data-dias="${em.dias}"
+               data-score="${prop.score}">
+        <td><span class="freq">${em.freq}</span><span class="freq-unit">kHz</span></td>
+        <td><span class="station-name">${em.emisora}</span></td>
+        <td>${badge}</td>
+        <td><span class="time-val">${em.utc_start}–${em.utc_end}</span></td>
+        <td><span class="time-ist">${local}</span></td>
+        <td><span class="days">${em.dias}</span></td>
+        <td class="prop-cell">${propCell}</td>
+        <td>${fuentes}</td>
+      </tr>`
+    };
+  });
+
+  // Sort
+  if (sortCol) {
+    rows.sort((a, b) => {
+      let va, vb;
+      if (sortCol === 'freq')    { va = parseFloat(a.em.freq);   vb = parseFloat(b.em.freq); }
+      if (sortCol === 'emisora') { va = a.em.emisora;             vb = b.em.emisora; }
+      if (sortCol === 'en_vivo') { va = a.en_vivo ? 1 : 0;       vb = b.en_vivo ? 1 : 0; }
+      if (sortCol === 'utc')     { va = a.em.utc_start;           vb = b.em.utc_start; }
+      if (sortCol === 'dias')    { va = a.em.dias;                vb = b.em.dias; }
+      if (sortCol === 'prop')    { va = a.prop.score;             vb = b.prop.score; }
+      if (typeof va === 'number') return (va - vb) * sortDir;
+      return (va||'').localeCompare(vb||'', 'es', {numeric:true}) * sortDir;
+    });
+  }
+
+  tbody.innerHTML = rows.map(r => r.html).join('');
+  filtrar(false);
+  updateCount();
+}
+
+// ── Sorting ───────────────────────────────────────────────────────────────────
+document.querySelectorAll('th.sortable').forEach(th => {
+  th.addEventListener('click', () => {
+    const col = th.dataset.col;
+    if (sortCol === col) sortDir *= -1; else { sortCol = col; sortDir = 1; }
+    document.querySelectorAll('th.sortable').forEach(t => {
+      t.classList.remove('sort-asc','sort-desc');
+      t.querySelector('.sort-icon').textContent = '↕';
+    });
+    th.classList.add(sortDir === 1 ? 'sort-asc' : 'sort-desc');
+    th.querySelector('.sort-icon').textContent = sortDir === 1 ? '↑' : '↓';
+    renderTable();
+  });
+});
+
+// ── Filter ────────────────────────────────────────────────────────────────────
+function filtrar(reRender = false) {
+  if (reRender) { renderTable(); return; }
+  const q = document.getElementById('filtro').value.toLowerCase();
+  const soloVivo = document.getElementById('soloVivo').checked;
+  document.querySelectorAll('#cuerpo tr').forEach(tr => {
+    const ok = (!q || tr.innerText.toLowerCase().includes(q)) &&
+               (!soloVivo || tr.classList.contains('activa'));
+    tr.style.display = ok ? '' : 'none';
+  });
+  updateCount();
+}
+
+function updateCount() {
+  const vis = document.querySelectorAll('#cuerpo tr:not([style*="none"])').length;
+  document.getElementById('count').textContent =
+    vis.toLocaleString() + ' emisión' + (vis !== 1 ? 'es' : '');
+}
+
+// ── Live status auto-refresh ─────────────────────────────────────────────────
+setInterval(() => {
+  if (SCHEDULE.length) renderTable();
+}, 60_000);
+
+// ── Bootstrap ────────────────────────────────────────────────────────────────
+async function init() {
+  renderCityPill();
+  updatePropHeader();
+
+  const [schedResp, solarResp] = await Promise.allSettled([
+    fetch('/api/schedule').then(r => r.json()),
+    fetch('/api/solar').then(r => r.json()),
+  ]);
+
+  if (schedResp.status === 'fulfilled') {
+    SCHEDULE = schedResp.value;
+  } else {
+    console.error('Schedule fetch failed', schedResp.reason);
+  }
+
+  if (solarResp.status === 'fulfilled') {
+    SOLAR_FLUX = solarResp.value.f107 || 120;
+    updateSolarBadge(SOLAR_FLUX);
+  }
+
+  document.getElementById('loading-overlay').style.display = 'none';
+
+  if (SCHEDULE.length === 0) {
+    document.getElementById('cuerpo').innerHTML =
+      `<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:40px">
+        No se pudieron obtener datos. Inténtalo de nuevo más tarde.
+      </td></tr>`;
+    updateCount();
+    return;
+  }
+
+  renderTable();
+}
+
+init();
 </script>
 </body>
 </html>
