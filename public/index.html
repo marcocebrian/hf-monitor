@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><title>HF Monitor — Engine Test</title></head>
+<body>
+<script>
+// ── HF Propagation Engine (ported from lista_emisoras_avanzado.py) ──────────
+
+const RAD = Math.PI / 180;
+
+function haversine_km(lat1, lon1, lat2, lon2) {
+  const R = 6371.0;
+  const dlat = (lat2 - lat1) * RAD;
+  const dlon = (lon2 - lon1) * RAD;
+  const a = Math.sin(dlat/2)**2 +
+            Math.cos(lat1*RAD) * Math.cos(lat2*RAD) * Math.sin(dlon/2)**2;
+  return R * 2 * Math.asin(Math.sqrt(Math.min(1.0, a)));
+}
+
+function azimuth_tx_rx(lat_tx, lon_tx, lat_rx, lon_rx) {
+  const dlon = (lon_rx - lon_tx) * RAD;
+  const lat1 = lat_tx * RAD, lat2 = lat_rx * RAD;
+  const x = Math.sin(dlon) * Math.cos(lat2);
+  const y = Math.cos(lat1)*Math.sin(lat2) - Math.sin(lat1)*Math.cos(lat2)*Math.cos(dlon);
+  return (Math.atan2(x, y) / RAD + 360) % 360;
+}
+
+function banda_optima_para_distancia(dist) {
+  if (dist < 500)  return [2000,  5000];
+  if (dist < 1500) return [3000,  7000];
+  if (dist < 3000) return [4000, 10000];
+  if (dist < 6000) return [6000, 14000];
+  if (dist < 9000) return [8000, 16000];
+  return [9000, 18000];
+}
+
+function es_de_dia_en_path(lat_tx, lon_tx, lat_rx, lon_rx) {
+  const lat1 = lat_tx * RAD, lon1 = lon_tx * RAD;
+  const lat2 = lat_rx * RAD, lon2 = lon_rx * RAD;
+  const bx = Math.cos(lat2) * Math.cos(lon2 - lon1);
+  const by = Math.cos(lat2) * Math.sin(lon2 - lon1);
+  const lat_mid = Math.atan2(Math.sin(lat1) + Math.sin(lat2),
+                             Math.sqrt((Math.cos(lat1) + bx)**2 + by**2));
+  const lon_mid = lon1 + Math.atan2(by, Math.cos(lat1) + bx);
+  const now = new Date();
+  const hora_solar = (now.getUTCHours() + now.getUTCMinutes()/60 +
+                      (lon_mid / RAD) / 15 + 24) % 24;
+  return hora_solar >= 6 && hora_solar <= 19;
+}
+
+function calcular_score_propagacion(freq_khz, lat_tx, lon_tx, powr_kw, lat_rx, lon_rx, azimuth, solar_flux) {
+  if (lat_tx === null || lon_tx === null) return { score: 0, label: 'sin datos' };
+  if (freq_khz < 2300 || freq_khz > 30000) return { score: 0, label: 'improbable' };
+
+  const dist   = haversine_km(lat_tx, lon_tx, lat_rx, lon_rx);
+  const es_dia = es_de_dia_en_path(lat_tx, lon_tx, lat_rx, lon_rx);
+  const sf     = Math.min(1.5, Math.max(0.6, solar_flux / 120));
+  const [f_min, f_max] = banda_optima_para_distancia(dist);
+
+  // Hard filters
+  if (dist > 13000 || dist < 100) return { score: 0, label: 'improbable' };
+  if (dist > 11000 && (!es_dia || freq_khz < 15000 || powr_kw < 100))
+    return { score: 0, label: 'improbable' };
+  if (!es_dia && dist > 5000 && freq_khz > Math.min(13000, 12500 * sf))
+    return { score: 0, label: 'improbable' };
+  if (!es_dia && dist > 8000 && freq_khz > Math.min(10500, 9000 * sf))
+    return { score: 0, label: 'improbable' };
+  if (dist > 3000 && freq_khz < f_min * 0.70) return { score: 0, label: 'improbable' };
+  if (freq_khz < 5000 && dist > 6000) return { score: 0, label: 'improbable' };
+
+  // Base score
+  let base;
+  if      (dist <= 200)   base = 8;
+  else if (dist <= 500)   base = 28;
+  else if (dist <= 2000)  base = 38;
+  else if (dist <= 5000)  base = 42;
+  else if (dist <= 8000)  base = 20;
+  else if (dist <= 11000) base = 10;
+  else                    base = 4;
+
+  // Band adjustment
+  const f_max_adj = f_max * sf;
+  let band_adj;
+  if (freq_khz >= f_min && freq_khz <= f_max_adj) {
+    band_adj = 30;
+  } else if (freq_khz > f_max_adj) {
+    const ratio = f_max_adj / freq_khz;
+    band_adj = Math.floor(30 * ratio * ratio) - 15;
+  } else {
+    const ratio = freq_khz / f_min;
+    band_adj = Math.floor(30 * (ratio ** 2)) - 20;
+  }
+
+  // Solar adjustment
+  let solar_adj;
+  if (es_dia) {
+    solar_adj = freq_khz >= 14000 ? 20 : freq_khz >= 9000 ? 15 : 5;
+  } else {
+    solar_adj = freq_khz < 7000 ? 18 : freq_khz < 10000 ? 10 :
+                freq_khz < 14000 ? 2 : -20;
+  }
+  if (!es_dia && dist > 3000 && dist < 9000) solar_adj += 5;  // greyline
+
+  // Power adjustment
+  const power_adj = powr_kw > 0 ? Math.min(10, Math.floor(10 * Math.log10(powr_kw + 1) / Math.log10(501))) : 1;
+
+  // Beam alignment
+  let beam_adj = 0;
+  if (azimuth !== null && azimuth !== undefined) {
+    const path_az = azimuth_tx_rx(lat_tx, lon_tx, lat_rx, lon_rx);
+    const diff = Math.min(Math.abs(path_az - azimuth), 360 - Math.abs(path_az - azimuth));
+    beam_adj = diff < 20 ? 5 : diff >= 45 ? -10 : 0;
+  }
+
+  const total = Math.max(0, Math.min(100, base + band_adj + solar_adj + power_adj + beam_adj));
+  const label = total >= 70 ? 'alta' : total >= 45 ? 'media' : total >= 20 ? 'baja' : 'improbable';
+  return { score: total, label };
+}
+
+// ── es_activo_hoy + esta_en_aire_ahora ──────────────────────────────────────
+
+function es_activo_hoy(dias_str) {
+  if (!dias_str) return true;
+  const d = dias_str.trim();
+  if (!d || ['daily','irr','irreg','alt','tent','test'].includes(d.toLowerCase())) return true;
+  if (/^\d+$/.test(d)) {
+    const hoy = ((new Date().getUTCDay() + 6) % 7) + 1; // 1=Mon...7=Sun
+    return d.includes(String(hoy));
+  }
+  return true; // unknown format → assume active
+}
+
+function esta_en_aire_ahora(utc_start, utc_end, dias_str) {
+  if (!es_activo_hoy(dias_str)) return false;
+  const now = new Date();
+  const hora_actual = now.getUTCHours() * 100 + now.getUTCMinutes();
+  const inicio = parseInt(utc_start, 10);
+  const fin    = parseInt(utc_end,   10);
+  if (inicio <= fin) return hora_actual >= inicio && hora_actual < fin;
+  return hora_actual >= inicio || hora_actual < fin; // crosses midnight
+}
+
+// ── Self-test ────────────────────────────────────────────────────────────────
+console.assert(Math.abs(haversine_km(39.47, -0.38, 19.07, 72.88) - 7218) < 100,
+  'haversine Valencia→Mumbai should be ~7218 km');
+
+const s = calcular_score_propagacion(15110, 39.88, -3.44, 500, 19.07, 72.88, 270, 120);
+console.assert(s.label !== 'sin datos', 'NOB→Mumbai should have a label');
+console.assert(s.score >= 0 && s.score <= 100, 'score out of range');
+
+const s2 = calcular_score_propagacion(15110, null, null, 500, 19.07, 72.88, null, 120);
+console.assert(s2.label === 'sin datos', 'null tx should return sin datos');
+
+console.log('✅ Engine self-test passed');
+</script>
+</body>
+</html>
