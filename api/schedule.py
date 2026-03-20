@@ -1104,8 +1104,6 @@ def parsear_eibi(texto, mapa):
     return añadidas, confirmadas
 
 
-# (append to api/schedule.py)
-
 def _build_urls():
     letra, sufijo = temporada_actual()
     cod = f'{letra.lower()}{sufijo}'
@@ -1113,7 +1111,7 @@ def _build_urls():
         'HFCC_NEW': f'https://new.hfcc.org/data/{cod}/{cod}allx2.zip',
         'HFCC_OLD': f'https://www.hfcc.org/data/{cod}/{cod}allx.zip',
         'HFCC_BRC': f'https://new.hfcc.org/data/{cod}/broadcas.txt',
-        'EiBi':     f'http://eibispace.de/dx/sked-{cod}.csv',
+        'EiBi':     f'http://eibispace.de/dx/sked-{cod}.csv',  # eibispace.de does not support HTTPS
     }
 
 

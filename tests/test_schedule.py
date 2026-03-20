@@ -50,7 +50,7 @@ def test_solar_fallback():
 
 SAMPLE_HFCC = (
     ";HFCC sample\n"
-    " 151100000 0200                                NOB    500180            1234567                       SPA            RNE                                                            \n"
+    " 151100000 0200                                NOB    500180            1234567                       SPA            RNE                                                                                                                                                                                    \n"
     "  96501800 2000                                EMR    250  0            1234567                       SPA            RHC                                                            \n"
 )
 
@@ -100,7 +100,6 @@ def test_lat_tx_resolved_for_known_site():
 def test_get_schedule_returns_list():
     """get_schedule() returns a list even when both sources fail."""
     from unittest.mock import patch
-    import urllib.error
 
     with patch('api.schedule.intentar_urls', side_effect=ConnectionError('mocked')):
         import importlib, api.schedule as sched
@@ -108,12 +107,13 @@ def test_get_schedule_returns_list():
         result = sched.get_schedule()
     assert isinstance(result, list)
 
+
 def test_get_schedule_entry_shape():
     """Each entry has required keys with correct types."""
     from unittest.mock import patch
 
     SAMPLE_HFCC_LINES = """;header
- 151100000 0200                                NOB    500180            1234567                       SPA            RNE
+ 151100000 0200                                NOB    500180            1234567                       SPA            RNE                                                            
 """
     SAMPLE_EIBI_LINES = """kHz;UTC;Days;ITU;Station;Language;Target;TxSite;Persist;Start;End
 6000;1800-2000;1234567;CUB;Radio Habana Cuba;spa;AM;;d;0329;1026
