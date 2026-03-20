@@ -126,6 +126,9 @@ function es_activo_hoy(dias_str) {
     const hoy = ((new Date().getUTCDay() + 6) % 7) + 1; // 1=Mon...7=Sun
     return d.includes(String(hoy));
   }
+  // NOTE: api/schedule.py normalizar_dias() pre-converts all EiBi text-format
+  // day strings (Mo-Fr, TuSa, etc.) to HFCC numeric before serving JSON,
+  // so text-format inputs are intentionally unsupported here.
   return true; // unknown format → assume active
 }
 
