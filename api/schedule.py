@@ -1102,3 +1102,65 @@ def parsear_eibi(texto, mapa):
             }
             añadidas += 1
     return añadidas, confirmadas
+
+
+# (append to api/schedule.py)
+
+def _build_urls():
+    letra, sufijo = temporada_actual()
+    cod = f'{letra.lower()}{sufijo}'
+    return {
+        'HFCC_NEW': f'https://new.hfcc.org/data/{cod}/{cod}allx2.zip',
+        'HFCC_OLD': f'https://www.hfcc.org/data/{cod}/{cod}allx.zip',
+        'HFCC_BRC': f'https://new.hfcc.org/data/{cod}/broadcas.txt',
+        'EiBi':     f'http://eibispace.de/dx/sked-{cod}.csv',
+    }
+
+
+def get_schedule():
+    """Fetch, parse, and return schedule as a list of dicts."""
+    urls = _build_urls()
+    mapa = {}
+
+    # 1. HFCC (authoritative)
+    brc_nombres = {}
+    try:
+        txt, _ = intentar_urls([urls['HFCC_NEW'], urls['HFCC_OLD']], modo='zip')
+        try:
+            brc_txt, _ = intentar_urls([urls['HFCC_BRC']])
+            brc_nombres = cargar_broadcasters(brc_txt)
+        except Exception:
+            pass
+        parsear_hfcc(txt, mapa, brc_nombres)
+    except Exception:
+        pass
+
+    # 2. EiBi (complementary)
+    try:
+        txt, _ = intentar_urls([urls['EiBi']])
+        parsear_eibi(txt, mapa)
+    except Exception:
+        pass
+
+    # Serialise: convert fuentes sets to lists for JSON
+    result = []
+    for entry in mapa.values():
+        entry['fuentes'] = sorted(entry['fuentes'])
+        result.append(entry)
+
+    return result
+
+
+class handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        data = get_schedule()
+        payload = json.dumps(data).encode('utf-8')
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Cache-Control', 'public, s-maxage=21600')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def log_message(self, format, *args):
+        pass

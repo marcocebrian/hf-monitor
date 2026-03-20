@@ -95,3 +95,52 @@ def test_lat_tx_resolved_for_known_site():
     # NOB = Noblejas Spain, should be in TRANSMITTER_SITES
     assert entry['lat_tx'] is not None
     assert entry['lon_tx'] is not None
+
+
+def test_get_schedule_returns_list():
+    """get_schedule() returns a list even when both sources fail."""
+    from unittest.mock import patch
+    import urllib.error
+
+    with patch('api.schedule.intentar_urls', side_effect=ConnectionError('mocked')):
+        import importlib, api.schedule as sched
+        importlib.reload(sched)
+        result = sched.get_schedule()
+    assert isinstance(result, list)
+
+def test_get_schedule_entry_shape():
+    """Each entry has required keys with correct types."""
+    from unittest.mock import patch
+
+    SAMPLE_HFCC_LINES = """;header
+ 151100000 0200                                NOB    500180            1234567                       SPA            RNE
+"""
+    SAMPLE_EIBI_LINES = """kHz;UTC;Days;ITU;Station;Language;Target;TxSite;Persist;Start;End
+6000;1800-2000;1234567;CUB;Radio Habana Cuba;spa;AM;;d;0329;1026
+"""
+
+    def fake_intentar_urls(urls, modo='texto'):
+        if modo == 'zip':
+            return SAMPLE_HFCC_LINES, urls[0]
+        if 'eibi' in urls[0]:
+            return SAMPLE_EIBI_LINES, urls[0]
+        raise ConnectionError
+
+    import importlib
+    with patch('api.schedule.intentar_urls', side_effect=fake_intentar_urls):
+        import api.schedule as sched
+        importlib.reload(sched)
+        result = sched.get_schedule()
+
+    assert len(result) >= 1
+    for entry in result:
+        assert 'freq' in entry
+        assert 'utc_start' in entry
+        assert 'utc_end' in entry
+        assert 'dias' in entry
+        assert 'emisora' in entry
+        assert isinstance(entry['fuentes'], list)
+        assert 'lat_tx' in entry   # may be None
+        assert 'lon_tx' in entry
+        assert 'powr_kw' in entry
+        assert 'azimuth' in entry  # may be None
