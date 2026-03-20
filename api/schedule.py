@@ -6,6 +6,7 @@ resolves transmitter coordinates, normalizes day strings,
 and returns a JSON array cached 6 hours at the Vercel edge.
 """
 
+import calendar as _cal
 import csv, io, json, math, ssl, urllib.request, urllib.error, zipfile
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler
@@ -52,8 +53,6 @@ def normalizar_dias(dias_str):
 
 
 # ── Season detection + download utilities ─────────────────────────────────────
-
-import calendar as _cal
 
 SSL_CTX = ssl.create_default_context()
 SSL_CTX.check_hostname = False
@@ -108,7 +107,7 @@ def descargar_zip_memoria(url):
         for nombre in z.namelist():
             if nombre.lower().endswith(('.txt', '.csv')):
                 return _decode(z.read(nombre))
-        return _decode(z.read(z.namelist()[0]))
+        raise ValueError(f'No .txt or .csv member found in ZIP archive')
 
 
 def intentar_urls(lista_urls, modo='texto'):
