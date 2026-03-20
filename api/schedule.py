@@ -7,7 +7,7 @@ and returns a JSON array cached 6 hours at the Vercel edge.
 """
 
 import calendar as _cal
-import csv, io, json, math, ssl, urllib.request, urllib.error, zipfile
+import csv, io, json, ssl, urllib.request, urllib.error, zipfile
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler
 
@@ -122,6 +122,8 @@ def intentar_urls(lista_urls, modo='texto'):
         except Exception as e:
             errores.append(f'{url} → {e}')
     raise ConnectionError('All URLs failed:\n' + '\n'.join(errores))
+
+
 TRANSMITTER_SITES = {
 'A': (-36.43, 145.40, 'Shepparton Australia'),
     'B': (-22.50, -43.18, 'Petropolis Brazil'),
@@ -855,9 +857,6 @@ TRANSMITTER_SITES = {
     'YOG': (-(7 + 47/60), 110 + 26/60, 'Yogyakarta'), # [cite: 184]
     'ZAH': (29 + 28/60, 60 + 53/60, 'Zahedan'), # [cite: 184]
     'ZWO': (52 + 29/60, 6 + 6/60, 'Zwolle') # [cite: 184, 185]
-
-
-    
 }
 
 COUNTRY_CENTERS = {
@@ -1024,7 +1023,8 @@ def parsear_hfcc(texto, mapa, brc_nombres):
         except ValueError:
             powr_kw = 0.0
         try:
-            azimuth = int(linea[57:60].strip() or 0)
+            _az = linea[57:60].strip()
+            azimuth = int(_az) if _az else None
         except ValueError:
             azimuth = None
         dias_raw  = linea[72:79].strip()
@@ -1035,7 +1035,7 @@ def parsear_hfcc(texto, mapa, brc_nombres):
         clave = f'{freq}_{utc_start}_{utc_end}'
 
         if clave in mapa:
-            mapa[clave]['fuentes'].add('HFCC')
+            mapa[clave]['fuentes'].add('HFCC')  # first-seen data wins; only fuentes updated
         else:
             mapa[clave] = {
                 'freq':      freq,
