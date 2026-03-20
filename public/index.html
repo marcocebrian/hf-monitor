@@ -679,6 +679,13 @@ function esta_en_aire_ahora(utc_start, utc_end, dias_str) {
   return hora_actual >= inicio || hora_actual < fin; // crosses midnight
 }
 
+// ── HTML escape helper ────────────────────────────────────────────────────────
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = String(s);
+  return d.innerHTML;
+}
+
 // ── App State ────────────────────────────────────────────────────────────────
 let SCHEDULE  = [];
 let SOLAR_FLUX = 120;
@@ -722,8 +729,8 @@ async function searchCity(q) {
     const hits = await resp.json();
     if (!hits.length) { sug.style.display = 'none'; return; }
     sug.innerHTML = hits.map(h =>
-      `<li onclick="selectCity(${h.lat},${h.lon},'${h.display_name.replace(/'/g,"\\'")}')">
-        ${h.display_name}
+      `<li onclick="selectCity(${h.lat},${h.lon},'${esc(h.display_name).replace(/'/g,"\\'")}')">
+        ${esc(h.display_name)}
       </li>`
     ).join('');
     sug.style.display = 'block';
@@ -836,7 +843,7 @@ function renderTable() {
                data-dias="${em.dias}"
                data-score="${prop.score}">
         <td><span class="freq">${em.freq}</span><span class="freq-unit">kHz</span></td>
-        <td><span class="station-name">${em.emisora}</span></td>
+        <td><span class="station-name">${esc(em.emisora)}</span></td>
         <td>${badge}</td>
         <td><span class="time-val">${em.utc_start}–${em.utc_end}</span></td>
         <td><span class="time-ist">${local}</span></td>
@@ -851,12 +858,12 @@ function renderTable() {
   if (sortCol) {
     rows.sort((a, b) => {
       let va, vb;
-      if (sortCol === 'freq')    { va = parseFloat(a.em.freq);   vb = parseFloat(b.em.freq); }
-      if (sortCol === 'emisora') { va = a.em.emisora;             vb = b.em.emisora; }
-      if (sortCol === 'en_vivo') { va = a.en_vivo ? 1 : 0;       vb = b.en_vivo ? 1 : 0; }
-      if (sortCol === 'utc')     { va = a.em.utc_start;           vb = b.em.utc_start; }
-      if (sortCol === 'dias')    { va = a.em.dias;                vb = b.em.dias; }
-      if (sortCol === 'prop')    { va = a.prop.score;             vb = b.prop.score; }
+      if      (sortCol === 'freq')    { va = parseFloat(a.em.freq);   vb = parseFloat(b.em.freq); }
+      else if (sortCol === 'emisora') { va = a.em.emisora;             vb = b.em.emisora; }
+      else if (sortCol === 'en_vivo') { va = a.en_vivo ? 1 : 0;       vb = b.en_vivo ? 1 : 0; }
+      else if (sortCol === 'utc')     { va = a.em.utc_start;           vb = b.em.utc_start; }
+      else if (sortCol === 'dias')    { va = a.em.dias;                vb = b.em.dias; }
+      else if (sortCol === 'prop')    { va = a.prop.score;             vb = b.prop.score; }
       if (typeof va === 'number') return (va - vb) * sortDir;
       return (va||'').localeCompare(vb||'', 'es', {numeric:true}) * sortDir;
     });
@@ -910,6 +917,16 @@ setInterval(() => {
 async function init() {
   renderCityPill();
   updatePropHeader();
+
+  // Populate season from current date
+  const _now = new Date();
+  const _y = _now.getUTCFullYear();
+  const _lastSunMar = new Date(Date.UTC(_y, 2, 31 - (new Date(Date.UTC(_y, 2, 31)).getUTCDay() + 6) % 7));
+  const _lastSunOct = new Date(Date.UTC(_y, 9, 31 - (new Date(Date.UTC(_y, 9, 31)).getUTCDay() + 6) % 7));
+  const _isA = _now >= _lastSunMar && _now < _lastSunOct;
+  const _suffix = _isA ? String(_y).slice(-2) : ((_now < _lastSunMar) ? String(_y - 1).slice(-2) : String(_y).slice(-2));
+  document.getElementById('meta-season').textContent =
+    `Temporada ${_isA ? 'A' : 'B'}${_suffix}`;
 
   const [schedResp, solarResp] = await Promise.allSettled([
     fetch('/api/schedule').then(r => r.json()),
