@@ -1,9 +1,5 @@
 {
-  "functions": {
-    "api/schedule.py": { "maxDuration": 10 },
-    "api/solar.py":    { "maxDuration": 5  }
-  },
   "rewrites": [
-    { "source": "/",  "destination": "/public/index.html" }
+    { "source": "/", "destination": "/public/index.html" }
   ]
 }
