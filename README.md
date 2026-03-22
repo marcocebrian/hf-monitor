@@ -2,7 +2,7 @@
 
 A live shortwave radio broadcast monitor focused on Spanish-language stations. Applies a custom HF propagation model to score reception likelihood for any city in the world, updated on every page load.
 
-**Live:** https://hf-monitor.vercel.app *(replace with your Vercel URL)*
+**Live:** https://hf-monitor.vercel.app
 
 ---
 
@@ -80,78 +80,6 @@ City geocoding uses [Nominatim](https://nominatim.openstreetmap.org) (no API key
 The server detects the current ITU season automatically and fetches the correct schedule file. HFCC is the authoritative source; EiBi adds entries not in HFCC and confirms overlapping ones.
 
 ---
-
-## Deployment (Vercel Hobby — free)
-
-### Requirements
-
-- A [Vercel](https://vercel.com) account (no credit card needed for Hobby tier)
-- A GitHub account
-
-### Steps
-
-```bash
-git clone https://github.com/marcocebrian/hf-monitor.git
-cd hf-monitor
-git remote set-url origin https://github.com/YOUR_USERNAME/YOUR_REPO.git
-git push -u origin main
-```
-
-Then:
-
-1. Go to **vercel.com** → **Add New Project** → import your repo
-2. Framework preset: **Other**
-3. Build command: *(leave empty)*
-4. Output directory: *(leave empty)*
-5. Click **Deploy**
-
-Vercel reads `vercel.json` automatically. No environment variables are required.
-
-### `vercel.json`
-
-```json
-{
-  "functions": {
-    "api/schedule.py": { "runtime": "python3.12", "maxDuration": 10 },
-    "api/solar.py":    { "runtime": "python3.12", "maxDuration": 5  }
-  },
-  "rewrites": [
-    { "source": "/", "destination": "/public/index.html" }
-  ]
-}
-```
-
-### Cold start note
-
-The first request to `/api/schedule` after an idle period downloads the HFCC ZIP + EiBi CSV (typically 3–6 seconds). With the 6-hour edge cache, this happens at most a few times per day. The loading animation covers the latency.
-
----
-
-## Running locally
-
-```bash
-pip install pytest
-pytest tests/ -v
-```
-
-For full local testing with live APIs, install the Vercel CLI:
-
-```bash
-npm i -g vercel
-vercel dev
-# → http://localhost:3000
-```
-
----
-
-## Vercel Hobby limits
-
-| Limit | Value |
-|---|---|
-| Bandwidth | 100 GB / month |
-| Function invocations | 100,000 / month |
-| Max function duration | 10 s |
-| Domains | Free `.vercel.app` subdomain |
 
 ---
 
