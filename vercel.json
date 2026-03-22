@@ -1,7 +1,7 @@
 {
   "functions": {
-    "api/schedule.py": { "runtime": "python3.12", "maxDuration": 10 },
-    "api/solar.py":    { "runtime": "python3.12", "maxDuration": 5  }
+    "api/schedule.py": { "maxDuration": 10 },
+    "api/solar.py":    { "maxDuration": 5  }
   },
   "rewrites": [
     { "source": "/",  "destination": "/public/index.html" }
