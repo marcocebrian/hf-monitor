@@ -1,4 +1,7 @@
 {
+  "functions": {
+    "api/*.py": { "maxDuration": 10 }
+  },
   "rewrites": [
     { "source": "/", "destination": "/public/index.html" }
   ]
